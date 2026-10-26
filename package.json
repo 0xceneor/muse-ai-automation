@@ -1,13 +1,14 @@
 {
   "name": "muse-ai-automation",
-  "version": "1.0.0",
-  "description": "Production-grade Muse.ai automation methodology, proxy bridge, and account provisioning pipeline.",
+  "version": "1.1.0",
+  "description": "Bulk Muse.ai account provisioning: disposable mail.tm inboxes, CloakBrowser fingerprint, residential proxy bridge, invite redemption, credential ledger.",
   "main": "scripts/launch_profile.js",
   "scripts": {
     "start": "node scripts/launch_profile.js"
   },
   "keywords": [
     "muse-ai",
+    "account-farming",
     "automation",
     "stealth",
     "anti-detect",

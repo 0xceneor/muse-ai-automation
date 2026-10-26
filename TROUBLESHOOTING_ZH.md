@@ -93,6 +93,32 @@ curl -x http://127.0.0.1:<bridge_port> https://ipinfo.io/json
 
 ---
 
+### 场景 5：验证码一直收不到
+
+* **现象**：`--fetch-otp` 轮询三分钟后超时。
+* **原因**：临时邮箱域名被过滤或限流，或出口 IP 已被标记。
+* **处置方案**：
+  1. 确认邮箱存在且可达：
+     ```bash
+     python -c "import csv,os;print(open(os.path.join('.','accounts.csv')).read())"
+     ```
+  2. 换一条代理让下次注册从不同 IP 出口，然后手动完成最近一条 `inbox_created` 记录：
+     ```bash
+     python scripts/muse_bot.py --submit-email <address>
+     ```
+  3. 若域名已废，用 `--new-account` 新开邮箱并放弃旧行。
+* **说明**：三分钟是 `accounts.wait_for_otp` 的默认轮询窗口，可调大 `timeout`，或直接用场景 1 的重发方案。
+
+---
+
+### 场景 6：第二个账号登录进了第一个账号
+
+* **现象**：新浏览器打开后已是登录状态。
+* **原因**：两次运行共用 `PROFILE_NAME`，继承了 Cookie 罐。
+* **处置方案**：每个账号独立 profile 与端口 —— `PROFILE_NAME=acct_02 CDP_PORT=9223` —— 并在驱动前导出对应的 `CDP_URL`。同一个 profile 目录绝不复用于第二个账号。
+
+---
+
 ## 3. 人机无缝协同协议
 
 整套自动化方案采用**桌面有头（Headed）CloakBrowser 会话**设计：

@@ -1,7 +1,10 @@
+const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
+const https = require('https');
 const net = require('net');
+const tls = require('tls');
 const { spawn } = require('child_process');
 const { URL } = require('url');
 
@@ -32,10 +35,11 @@ class LocalProxyBridge {
   }
 
   handleConnect(clientReq, clientSocket, head) {
-    const upstreamPort = parseInt(this.upstreamUrl.port, 10) || 80;
+    const secure = this.upstreamUrl.protocol === 'https:';
+    const upstreamPort = parseInt(this.upstreamUrl.port, 10) || (secure ? 443 : 80);
     const upstreamHost = this.upstreamUrl.hostname;
 
-    const upstreamSocket = net.connect(upstreamPort, upstreamHost, () => {
+    const onConnect = () => {
       let authHeader = '';
       if (this.upstreamUrl.username || this.upstreamUrl.password) {
         const creds = Buffer.from(`${decodeURIComponent(this.upstreamUrl.username)}:${decodeURIComponent(this.upstreamUrl.password)}`).toString('base64');
@@ -44,7 +48,11 @@ class LocalProxyBridge {
 
       const connectReq = `CONNECT ${clientReq.url} HTTP/1.1\r\nHost: ${clientReq.url}\r\n${authHeader}Proxy-Connection: Keep-Alive\r\n\r\n`;
       upstreamSocket.write(connectReq);
-    });
+    };
+
+    const upstreamSocket = secure
+      ? tls.connect({ port: upstreamPort, host: upstreamHost, servername: upstreamHost }, onConnect)
+      : net.connect(upstreamPort, upstreamHost, onConnect);
 
     let established = false;
     let buffer = Buffer.alloc(0);
@@ -85,7 +93,9 @@ class LocalProxyBridge {
       return;
     }
 
-    const upstreamPort = parseInt(this.upstreamUrl.port, 10) || 80;
+    const secure = this.upstreamUrl.protocol === 'https:';
+    const transport = secure ? https : http;
+    const upstreamPort = parseInt(this.upstreamUrl.port, 10) || (secure ? 443 : 80);
     const upstreamHost = this.upstreamUrl.hostname;
 
     const options = {
@@ -101,7 +111,7 @@ class LocalProxyBridge {
       options.headers['Proxy-Authorization'] = `Basic ${creds}`;
     }
 
-    const proxyReq = http.request(options, (proxyRes) => {
+    const proxyReq = transport.request(options, (proxyRes) => {
       clientRes.writeHead(proxyRes.statusCode, proxyRes.headers);
       proxyRes.pipe(clientRes, { end: true });
     });
@@ -132,16 +142,37 @@ function findBinary() {
 }
 
 async function main() {
-  const proxy = process.env.PROXY_URL;
+  let proxy = process.env.PROXY_URL;
   if (!proxy) {
     console.error('[!] Error: PROXY_URL environment variable is required (e.g. export PROXY_URL=http://user:pass@host:port)');
     process.exit(1);
   }
+
+  // Rotate sticky session only for rotating residential proxies (e.g., GeoNode, BrightData)
+  // that support session tokens in the username. For static proxies (like Webshare),
+  // preserve the original credentials intact.
+  const supportsSession = proxy.includes('geonode') || proxy.includes('-session-') || proxy.includes('brightdata') || proxy.includes('oxylabs');
+  if (supportsSession && process.env.PROXY_SESSION) {
+    const session = process.env.PROXY_SESSION;
+    proxy = proxy.replace(/^(https?:\/\/)([^@]+)@/, (m, scheme, userinfo) => {
+      const [user, pass] = userinfo.split(/:(.*)/, 2);
+      const base = user.replace(/-session-[^-]+-?$/, '');
+      return `${scheme}${base}-session-${session}:${pass}@`;
+    });
+    console.log(`[*] Sticky Residential Session: ${session}`);
+  }
+
   const cdpPort = process.env.CDP_PORT || 9222;
-  const dataDir = path.join(require('os').homedir(), '.cloakbrowser', 'profiles', 'muse_profile');
+  const profile = process.env.PROFILE_NAME || `profile_${crypto.randomBytes(4).toString('hex')}`;
+  const dataDir = path.join(require('os').homedir(), '.cloakbrowser', 'profiles', profile);
+
+  // Generate dynamic random fingerprint seed if none is specified
+  const fpSeed = process.env.FINGERPRINT || crypto.randomInt(100000, 999999).toString();
 
   const binary = findBinary();
   console.log(`[*] Stealth Binary: ${binary}`);
+  console.log(`[*] Profile Directory: ${dataDir}`);
+  console.log(`[*] Dynamic Fingerprint Seed: ${fpSeed}`);
   console.log(`[*] Starting Proxy Bridge for: ${proxy}`);
 
   const bridge = new LocalProxyBridge(proxy);
@@ -152,7 +183,7 @@ async function main() {
     `--user-data-dir=${dataDir}`,
     '--no-first-run',
     '--no-default-browser-check',
-    '--fingerprint=61842',
+    `--fingerprint=${fpSeed}`,
     '--fingerprint-platform=windows',
     '--fingerprint-taskbar-height=48',
     '--fingerprint-windows-font-metrics',
@@ -165,7 +196,21 @@ async function main() {
     'https://muse.ai'
   ];
 
-  console.log(`[*] Launching browser on port ${cdpPort}...`);
+  // Pick realistic desktop resolutions
+  const desktopResolutions = ['1920,1080', '1536,864', '1680,1050', '1440,900'];
+  const chosenResolution = process.env.WINDOW_SIZE || desktopResolutions[Math.floor(Math.random() * desktopResolutions.length)];
+
+  // Opt-in headless. New headless keeps the Windows persona intact, which the
+  // legacy --headless=old mode does not.
+  if (process.env.HEADLESS === '1' || process.env.HEADLESS === 'true') {
+    args.unshift('--headless=new');
+    args.unshift(`--window-size=${chosenResolution}`);
+    args.unshift('--disable-gpu');
+  } else {
+    args.unshift(`--window-size=${chosenResolution}`);
+  }
+
+  console.log(`[*] Launching browser on port ${cdpPort}${process.env.HEADLESS === '1' || process.env.HEADLESS === 'true' ? ' (headless)' : ''}...`);
   const child = spawn(binary, args, { stdio: 'inherit' });
 
   child.on('exit', (code) => {

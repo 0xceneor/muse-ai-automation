@@ -1,8 +1,8 @@
-# Muse.ai Automation Pipeline — Technical Architecture & Deep Dive
+# Muse.ai Batch Provisioning — Technical Architecture
 
 [English](ARCHITECTURE.md) | [简体中文](ARCHITECTURE_ZH.md)
 
-This document provides a comprehensive technical breakdown of the **Muse.ai** onboarding pipeline, the underlying Meta Account authentication flow, security & bot-detection defenses, and the Playwright CDP evasion strategies implemented in this repository.
+How the batch pipeline works, why each evasion layer exists, and what the target actually checks. Written for building out and debugging a run.
 
 ---
 
@@ -80,7 +80,7 @@ The account registration and activation sequence operates as a deterministic 7-s
          │
          ▼
   ┌──────────────┐
-  │ 7. Workspace │ ──► Open Settings -> Redeem invite code (RM99IU)
+  │ 7. Workspace │ ──► Open Settings -> Redeem invite code (INVITE_CODE)
   └──────────────┘
 ```
 
@@ -129,6 +129,8 @@ The account registration and activation sequence operates as a deterministic 7-s
 
 ---
 
-## 5. Security & Privacy Safeguards
-* **Zero Hardcoded Secrets**: All scripts strictly accept environment variables (`CARD_NUMBER`, `CARD_EXPIRY`, `CARD_CVV`, `PROXY_URL`).
-* **Session Persistence**: User sessions, auth cookies, and local storage keys are isolated per profile in `~/.cloakbrowser/profiles/<id>/`, preventing cross-account contamination.
+## 5. Operational Invariants
+
+* **Card details stay in `.env`**: `CARD_NUMBER`, `CARD_EXPIRY` and `CARD_CVV` are read from the environment only, never written to the repo.
+* **One profile per account**: sessions, auth cookies and local storage live in `~/.cloakbrowser/profiles/<profile>/`; pass a distinct `PROFILE_NAME` per account or the second signup inherits the first account's state.
+* **Ledger is append-first**: accounts are written to `accounts.csv` the moment they exist, so a killed run leaves usable credentials behind rather than orphans.

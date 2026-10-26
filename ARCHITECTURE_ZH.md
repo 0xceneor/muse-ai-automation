@@ -1,8 +1,8 @@
-# Muse.ai 自动化流水线 — 技术架构与深度解析
+# Muse.ai 批量注册流水线 — 技术架构与深度解析
 
 [English (英文)](ARCHITECTURE.md) | [简体中文](ARCHITECTURE_ZH.md)
 
-本文档针对 **Muse.ai** 账户开通流水线、Meta 底层账户鉴权体系、反爬与风控检测机制以及本仓库中实现的 Playwright CDP 规避策略进行全面的技术剖析。
+本文件讲清批量流水线如何运作、每一层规避为何存在、以及目标站到底在校验什么——面向搭建与排障。
 
 ---
 
@@ -80,7 +80,7 @@ Muse.ai 是 Meta 推出的全新一代全自动个人 AI Agent 平台。其账�
          │
          ▼
   ┌──────────────┐
-  │ 7. 个人主页  │ ──► 进入设置 (Settings) -> 兑换邀请码 (RM99IU)
+  │ 7. 个人主页  │ ──► 进入设置 (Settings) -> 兑换邀请码 (INVITE_CODE)
   └──────────────┘
 ```
 
@@ -129,6 +129,8 @@ Muse.ai 是 Meta 推出的全新一代全自动个人 AI Agent 平台。其账�
 
 ---
 
-## 5. 安全与隐私准则
-* **严禁硬编码敏感信息**：所有核心脚本均强制从环境变量（`CARD_NUMBER`, `CARD_EXPIRY`, `CARD_CVV`, `PROXY_URL`）读取，禁止将任何个人财务数据持久化至仓库。
-* **严格会话隔离**：每个自动化账号运行于独立的个人数据目录 `~/.cloakbrowser/profiles/<id>/`，实现多账号间 Cookie、本地存储、缓存与硬件指纹的绝对隔离。
+## 5. 运行不变量
+
+* **卡信息只留在 `.env`**：`CARD_NUMBER`、`CARD_EXPIRY`、`CARD_CVV` 仅从环境变量读取，不落仓库。
+* **一账号一 profile**：会话、鉴权 Cookie、本地存储均位于 `~/.cloakbrowser/profiles/<profile>/`；每个账号必须传不同的 `PROFILE_NAME`，否则第二个账号会继承前一个账号的状态。
+* **账本先落盘**：账号一创建即写入 `accounts.csv`，即便进程被杀也留下可用凭据，而不是无主账号。

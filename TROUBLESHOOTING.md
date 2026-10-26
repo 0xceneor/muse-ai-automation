@@ -93,6 +93,32 @@ curl -x http://127.0.0.1:<bridge_port> https://ipinfo.io/json
 
 ---
 
+### Scenario 5: No OTP Arrives
+
+* **Symptom**: `--fetch-otp` polls for three minutes and times out.
+* **Root cause**: the disposable domain was filtered or throttled, or the egress IP is flagged.
+* **Resolution**:
+  1. Confirm the inbox exists and is reachable:
+     ```bash
+     python -c "import csv,os;print(open(os.path.join('.','accounts.csv')).read())"
+     ```
+  2. Rotate the proxy so the next signup leaves from a different IP, then work the last `inbox_created` row by hand:
+     ```bash
+     python scripts/muse_bot.py --submit-email <address>
+     ```
+  3. If the domain is burned, mint a fresh inbox with `--new-account` and abandon the old row.
+* **Note**: three minutes is the default poll window in `accounts.wait_for_otp`; raise `timeout` there or fire the resend recipe in Scenario 1.
+
+---
+
+### Scenario 6: Second Account Signs Into the First
+
+* **Symptom**: the new browser opens the workspace already logged in.
+* **Root cause**: both runs shared `PROFILE_NAME`, so the cookie jar was inherited.
+* **Resolution**: give every account its own profile and port — `PROFILE_NAME=acct_02 CDP_PORT=9223` — and export the matching `CDP_URL` before driving it. Never reuse a profile directory for a second signup.
+
+---
+
 ## 3. Human Intervention Protocol
 
 The entire pipeline is intentionally designed around **Headed CloakBrowser Sessions**:
