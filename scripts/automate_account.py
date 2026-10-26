@@ -164,6 +164,27 @@ def do_birthday(page):
 
         log(f"birthday {MONTHS[month - 1]} {day}, {year} (age {date.today().year - year})")
 
+        # Check for first and last name inputs if requested on this screen
+        fn_input = page.locator('input[placeholder*="First name" i], input[name*="first" i], input[aria-label*="First name" i]')
+        ln_input = page.locator('input[placeholder*="Last name" i], input[name*="last" i], input[aria-label*="Last name" i]')
+        if fn_input.count() > 0 and fn_input.first.is_visible():
+            first_names = ["Alex", "Jordan", "Taylor", "Morgan", "Casey", "Riley", "Sam", "Chris"]
+            last_names = ["Smith", "Johnson", "Williams", "Brown", "Jones", "Miller", "Davis"]
+            fn = random.choice(first_names)
+            ln = random.choice(last_names)
+            log(f"  filling name: {fn} {ln}")
+            try:
+                fn_input.first.fill(fn)
+                ln_input.first.fill(ln)
+                page.evaluate("""() => {
+                    const f = document.querySelector('input[placeholder*="First name" i], input[name*="first" i]');
+                    const l = document.querySelector('input[placeholder*="Last name" i], input[name*="last" i]');
+                    if (f) { f.dispatchEvent(new Event('input', { bubbles: true })); f.dispatchEvent(new Event('change', { bubbles: true })); }
+                    if (l) { l.dispatchEvent(new Event('input', { bubbles: true })); l.dispatchEvent(new Event('change', { bubbles: true })); }
+                }""")
+            except Exception as e:
+                log(f"  name fill error: {e}")
+
         # Use React-native property setter to ensure React component state updates
         res = page.evaluate("""([m, d, y]) => {
             const selects = document.querySelectorAll('select');
@@ -202,17 +223,22 @@ def do_birthday(page):
                 time.sleep(0.5)
             except Exception:
                 pass
+            # Wait for button to be enabled if disabled
+            if btn.is_disabled():
+                time.sleep(1.5)
             btn.click(force=True)
             log("birthday submitted")
             try:
                 page.wait_for_function(
-                    "() => document.querySelectorAll('select').length < 3 || window.location.pathname.includes('/access/')",
+                    "() => document.querySelectorAll('select').length < 3 || window.location.pathname.includes('/access') || document.querySelector('button[data-pel-click*=\"disclosure\"]')",
                     timeout=15000,
                 )
             except Exception:
                 pass
             time.sleep(2)
-            return True
+            if page.locator("select").count() < 3 or "/access" in page.url or page.locator(DISCLOSURE_BTN).count() > 0:
+                return True
+            log("  birthday form still present, retrying...")
 
         time.sleep(1.5)
 
@@ -292,38 +318,53 @@ def do_card(page, browser, card, expiry, cvv, zip_code):
 
 
 def do_redeem(page, invite_code):
-    log("opening settings")
-    btn = page.locator(SETTINGS_BTN).first
-    if btn.count() == 0:
-        log("settings button missing")
-        return False
-    btn.click()
-    time.sleep(2)
-
-    nav = page.locator(SETTINGS_NAV)
-    if nav.count() > 0:
-        nav.first.click()
-        time.sleep(2.5)
-
-    back = page.locator('button[aria-label="Go back"]')
-    if back.count() > 0 and back.first.is_visible():
-        log("unwinding settings sub-page")
-        back.first.click()
-        time.sleep(1.5)
-
-    # Wait up to 20s for settings content / token usage skeleton loader to resolve
     entry = None
-    deadline = time.time() + 20
-    while time.time() < deadline:
-        cand = page.locator(REDEEM_ENTRY)
-        if cand.count() > 0 and cand.first.is_visible():
-            entry = cand.first
+    for attempt in range(1, 4):
+        log(f"opening settings (attempt {attempt}/3)")
+        btn = page.locator(SETTINGS_BTN).first
+        if btn.count() == 0:
+            log("settings button missing")
+            time.sleep(2)
+            continue
+        try:
+            btn.click()
+            time.sleep(2)
+        except Exception:
+            pass
+
+        nav = page.locator(SETTINGS_NAV)
+        if nav.count() > 0 and nav.first.is_visible():
+            try:
+                nav.first.click()
+                time.sleep(2.5)
+            except Exception:
+                pass
+
+        back = page.locator('button[aria-label="Go back"]')
+        if back.count() > 0 and back.first.is_visible():
+            log("unwinding settings sub-page")
+            try:
+                back.first.click()
+                time.sleep(1.5)
+            except Exception:
+                pass
+
+        # Wait up to 15s for settings content / token usage skeleton loader to resolve
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            cand = page.locator(REDEEM_ENTRY)
+            if cand.count() > 0 and cand.first.is_visible():
+                entry = cand.first
+                break
+            cand_alt = page.locator('button:has-text("Redeem a code"), [role="button"]:has-text("Redeem a code")')
+            if cand_alt.count() > 0 and cand_alt.first.is_visible():
+                entry = cand_alt.first
+                break
+            time.sleep(0.5)
+        
+        if entry:
             break
-        cand_alt = page.locator('button:has-text("Redeem a code"), [role="button"]:has-text("Redeem a code")')
-        if cand_alt.count() > 0 and cand_alt.first.is_visible():
-            entry = cand_alt.first
-            break
-        time.sleep(0.5)
+        time.sleep(1)
 
     if not entry:
         log("redeem entry point not present")
@@ -411,12 +452,8 @@ def run_all_after_email(page, browser, invite_code, card=None, expiry=None,
             last = current
 
         if current == "birthday":
-            if not birthday_done:
-                if not do_birthday(page):
-                    return False
-                birthday_done = True
-            else:
-                time.sleep(1.5)
+            if not do_birthday(page):
+                return False
         elif current == "disclosure":
             if not do_disclosure(page):
                 return False
