@@ -33,7 +33,7 @@ EXP_SEL = 'input[placeholder*="MM/YY" i], input[placeholder*="MM / YY" i]'
 CVV_SEL = 'input[placeholder*="CVV" i], input[placeholder*="CVC" i]'
 ZIP_SEL = 'input[placeholder*="ZIP" i], input[aria-label*="ZIP" i], input[placeholder*="Postal" i]'
 BIRTHDAY_BTN = 'button[data-pel-click="login_birthday_continue_click"]'
-DISCLOSURE_BTN = 'button[data-pel-click="onboarding_disclosure_continue_click"]'
+DISCLOSURE_BTN = 'button:has-text("Get started"), button[data-pel-click="onboarding_disclosure_continue_click"]'
 SETTINGS_BTN = 'button[aria-label="Settings"], button[data-pel-click="settings_menu_open_click"]'
 SETTINGS_NAV = '[data-pel-click="settings_nav_click"]'
 REDEEM_ENTRY = '[data-pel-click="invite_redeem_open_click"]'
@@ -118,6 +118,7 @@ def select_number(select_loc, target):
 
 
 def fill_field(page, locator, text, delay=35):
+    target = str(text).replace(" ", "").replace("/", "")
     for _ in range(4):
         try:
             locator.click()
@@ -125,8 +126,8 @@ def fill_field(page, locator, text, delay=35):
             for ch in str(text):
                 locator.type(ch, delay=delay)
             time.sleep(0.3)
-            got = locator.input_value().replace(" ", "")
-            if got == str(text).replace(" ", ""):
+            got = locator.input_value().replace(" ", "").replace("/", "")
+            if got == target:
                 return True
         except Exception:
             pass
