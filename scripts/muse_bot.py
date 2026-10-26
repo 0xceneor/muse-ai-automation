@@ -199,7 +199,8 @@ def enter_email(page, email):
     log("clicking Continue")
     page.locator(CONTINUE_SEL).first.click()
 
-    deadline = time.time() + 40
+    deadline = time.time() + 50
+    retry_cooldown = time.time() + 6
     while time.time() < deadline:
         dialog = page.locator('[role="dialog"]')
         if dialog.count() > 0 and dialog.first.is_visible():
@@ -208,7 +209,18 @@ def enter_email(page, email):
                 log(f"dialog on email screen: {text[:200]}")
                 take_status_snapshot(page, "muse_rejected.png")
                 return False
-        if page.locator(OTP_SEL).count() > 0:
+
+        # If inline error appears (e.g. "We couldn't send a code. Try again."), re-click Continue
+        err_loc = page.locator("text*='couldn\\'t send a code', text*='Try again'")
+        if err_loc.count() > 0 and err_loc.first.is_visible() and time.time() > retry_cooldown:
+            log("Inline error 'couldn't send a code' detected. Re-clicking Continue...")
+            try:
+                page.locator(CONTINUE_SEL).first.click()
+            except Exception:
+                pass
+            retry_cooldown = time.time() + 8
+
+        if page.locator(OTP_SEL).count() > 0 or page.locator("text*='Enter your code'").count() > 0:
             log("OTP screen reached")
             return True
         time.sleep(0.5)

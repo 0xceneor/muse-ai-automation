@@ -201,6 +201,14 @@ def do_birthday(page):
             pass
         page.locator(BIRTHDAY_BTN).first.click()
         log("birthday submitted")
+        try:
+            page.wait_for_function(
+                "() => document.querySelectorAll('select').length < 3 || window.location.pathname.includes('/access/')",
+                timeout=15000,
+            )
+        except Exception:
+            pass
+        time.sleep(2)
         return True
 
     log("could not set an adult birthday")
@@ -216,6 +224,14 @@ def do_disclosure(page):
     except Exception:
         pass
     page.locator(DISCLOSURE_BTN).first.click()
+    try:
+        page.wait_for_function(
+            "() => !document.querySelector('button[data-pel-click=\"onboarding_disclosure_continue_click\"]') || window.location.pathname.includes('/card') || window.location.pathname.includes('/payment') || document.querySelector('input[data-testid=\"card-number\"]')",
+            timeout=15000,
+        )
+    except Exception:
+        pass
+    time.sleep(2)
     return True
 
 
@@ -339,6 +355,9 @@ def run_all_after_email(page, browser, invite_code, card=None, expiry=None,
 
     log(f"continuing at {page.url}")
     last = None
+    birthday_done = False
+    disclosure_done = False
+    card_done = False
 
     # Card authorisation alone took ~25s in testing; allow generous headroom.
     for _ in range(120):
@@ -354,14 +373,26 @@ def run_all_after_email(page, browser, invite_code, card=None, expiry=None,
             last = current
 
         if current == "birthday":
-            if not do_birthday(page):
-                return False
+            if not birthday_done:
+                if not do_birthday(page):
+                    return False
+                birthday_done = True
+            else:
+                time.sleep(1.5)
         elif current == "disclosure":
-            if not do_disclosure(page):
-                return False
+            if not disclosure_done:
+                if not do_disclosure(page):
+                    return False
+                disclosure_done = True
+            else:
+                time.sleep(1.5)
         elif current == "card":
-            if not do_card(page, browser, card, expiry, cvv, zip_code):
-                return False
+            if not card_done:
+                if not do_card(page, browser, card, expiry, cvv, zip_code):
+                    return False
+                card_done = True
+            else:
+                time.sleep(1.5)
         elif current in ("workspace", "redeem_entry", "redeem_input"):
             break
         time.sleep(1.5)
@@ -389,6 +420,9 @@ def run_automation(card, expiry, cvv, invite_code, zip_code=None):
     try:
         log(f"starting at {page.url}")
         last = None
+        birthday_done = False
+        disclosure_done = False
+        card_done = False
 
         # Card authorisation alone took ~25s in testing; allow generous headroom.
         for _ in range(60):
@@ -405,14 +439,26 @@ def run_automation(card, expiry, cvv, invite_code, zip_code=None):
                 last = current
 
             if current == "birthday":
-                if not do_birthday(page):
-                    return False
+                if not birthday_done:
+                    if not do_birthday(page):
+                        return False
+                    birthday_done = True
+                else:
+                    time.sleep(1.5)
             elif current == "disclosure":
-                if not do_disclosure(page):
-                    return False
+                if not disclosure_done:
+                    if not do_disclosure(page):
+                        return False
+                    disclosure_done = True
+                else:
+                    time.sleep(1.5)
             elif current == "card":
-                if not do_card(page, browser, card, expiry, cvv, zip_code):
-                    return False
+                if not card_done:
+                    if not do_card(page, browser, card, expiry, cvv, zip_code):
+                        return False
+                    card_done = True
+                else:
+                    time.sleep(1.5)
             elif current in ("workspace", "redeem_entry", "redeem_input"):
                 break
             time.sleep(1.5)
