@@ -5,5 +5,6 @@ __pycache__/
 proxies.txt
 accounts.csv
 batch_accounts.json
+.current_custom_email.txt
 artifacts/
 .DS_Store

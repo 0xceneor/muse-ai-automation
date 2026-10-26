@@ -222,21 +222,35 @@ def do_birthday(page):
 
 def do_disclosure(page):
     log("accepting the disclosure")
-    time.sleep(random.uniform(2.0, 3.5))
-    try:
-        page.locator(DISCLOSURE_BTN).first.hover()
-        time.sleep(random.uniform(0.3, 0.7))
-    except Exception:
-        pass
-    page.locator(DISCLOSURE_BTN).first.click()
-    try:
-        page.wait_for_function(
-            "() => !document.querySelector('button[data-pel-click=\"onboarding_disclosure_continue_click\"]') || window.location.pathname.includes('/card') || window.location.pathname.includes('/payment') || document.querySelector('input[data-testid=\"card-number\"]')",
-            timeout=15000,
-        )
-    except Exception:
-        pass
-    time.sleep(2)
+    time.sleep(random.uniform(1.5, 2.5))
+    for attempt in range(1, 4):
+        if page.locator(CARD_SEL).count() > 0 or "/verification" in page.url:
+            log("  already on card verification screen")
+            return True
+        btn = page.locator(DISCLOSURE_BTN).first
+        try:
+            if btn.count() == 0 or not btn.is_visible():
+                return True
+            btn.hover()
+            time.sleep(0.3)
+            btn.click(force=True, timeout=5000)
+        except Exception as e:
+            log(f"  disclosure click handled: {e}")
+            if page.locator(CARD_SEL).count() > 0 or "/verification" in page.url:
+                return True
+            time.sleep(1)
+            continue
+
+        try:
+            page.wait_for_function(
+                "() => !document.querySelector('button:has-text(\"Get started\")') || window.location.pathname.includes('/card') || window.location.pathname.includes('/verification') || document.querySelector('input[placeholder*=\"Card number\" i]')",
+                timeout=12000,
+            )
+        except Exception:
+            pass
+        time.sleep(1.5)
+        if page.locator(CARD_SEL).count() > 0 or "/verification" in page.url:
+            return True
     return True
 
 
@@ -297,11 +311,24 @@ def do_redeem(page, invite_code):
         back.first.click()
         time.sleep(1.5)
 
-    entry = page.locator(REDEEM_ENTRY)
-    if entry.count() == 0:
+    # Wait up to 20s for settings content / token usage skeleton loader to resolve
+    entry = None
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        cand = page.locator(REDEEM_ENTRY)
+        if cand.count() > 0 and cand.first.is_visible():
+            entry = cand.first
+            break
+        cand_alt = page.locator('button:has-text("Redeem a code"), [role="button"]:has-text("Redeem a code")')
+        if cand_alt.count() > 0 and cand_alt.first.is_visible():
+            entry = cand_alt.first
+            break
+        time.sleep(0.5)
+
+    if not entry:
         log("redeem entry point not present")
         return False
-    entry.first.click()
+    entry.click()
     time.sleep(2.5)
 
     if not wait_hydrated(page, 'input[aria-label="Invite code"]', 15):
@@ -369,7 +396,13 @@ def run_all_after_email(page, browser, invite_code, card=None, expiry=None,
         current = screen_of(page)
 
         dialog_text = dismiss_dialog(page)
-        if dialog_text and ("aren’t able" in dialog_text or "can’t create a new account right now" in dialog_text):
+        if dialog_text and (
+            "aren’t able" in dialog_text 
+            or "can’t create a new account right now" in dialog_text
+            or "unable to add card" in dialog_text.lower()
+            or "associated with too many" in dialog_text.lower()
+        ):
+            log(f"terminal dialog encountered: {dialog_text[:120]}")
             take_status_snapshot(page, "muse_rejected.png")
             return False
 
@@ -385,12 +418,8 @@ def run_all_after_email(page, browser, invite_code, card=None, expiry=None,
             else:
                 time.sleep(1.5)
         elif current == "disclosure":
-            if not disclosure_done:
-                if not do_disclosure(page):
-                    return False
-                disclosure_done = True
-            else:
-                time.sleep(1.5)
+            if not do_disclosure(page):
+                return False
         elif current == "card":
             if not card_done:
                 if not do_card(page, browser, card, expiry, cvv, zip_code):
@@ -451,12 +480,8 @@ def run_automation(card, expiry, cvv, invite_code, zip_code=None):
                 else:
                     time.sleep(1.5)
             elif current == "disclosure":
-                if not disclosure_done:
-                    if not do_disclosure(page):
-                        return False
-                    disclosure_done = True
-                else:
-                    time.sleep(1.5)
+                if not do_disclosure(page):
+                    return False
             elif current == "card":
                 if not card_done:
                     if not do_card(page, browser, card, expiry, cvv, zip_code):

@@ -144,12 +144,24 @@ def wait_enabled(page, selector, timeout=20):
 
 def dismiss_remembered(page):
     """A reused profile shows a saved-account chip instead of the email field."""
-    link = page.locator('text="Use another account"')
-    if link.count() > 0 and link.first.is_visible():
-        log("remembered account found, choosing 'Use another account'")
-        link.first.click()
-        time.sleep(1.5)
-        return True
+    selectors = [
+        'text="Use another account"',
+        'text="Log into another account"',
+        'text="Log in to another account"',
+        'button:has-text("another account")',
+        'a:has-text("another account")',
+        '[data-pel-click*="another_account"]',
+    ]
+    for sel in selectors:
+        link = page.locator(sel)
+        if link.count() > 0 and link.first.is_visible():
+            log(f"remembered account found ({sel}), choosing 'Use another account'")
+            try:
+                link.first.click(timeout=3000)
+                time.sleep(1.5)
+                return True
+            except Exception:
+                pass
     return False
 
 
@@ -177,12 +189,22 @@ def type_verified(page, locator, text, enable_selector, delay=35, attempts=5):
 
 def enter_email(page, email):
     log("waiting for the signup form to hydrate...")
-    if not wait_hydrated(page, EMAIL_SEL):
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        if dismiss_remembered(page):
+            time.sleep(1.0)
+        if hydrated(page, EMAIL_SEL):
+            break
+        time.sleep(0.5)
+
+    if not hydrated(page, EMAIL_SEL):
+        dismiss_remembered(page)
+        time.sleep(1.0)
+
+    if not wait_hydrated(page, EMAIL_SEL, timeout=10):
         log("email form never hydrated")
         take_status_snapshot(page, "muse_no_input.png")
         return False
-
-    dismiss_remembered(page)
 
     inp = page.locator(EMAIL_SEL)
     if inp.count() == 0:

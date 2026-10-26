@@ -193,6 +193,14 @@ def run(email: str = None, password: str = None, client_id: str = None, refresh_
             except Exception:
                 pass
 
+            # Ensure page is loaded on https://muse.ai
+            if "muse.ai" not in page.url or "chrome-error" in page.url:
+                try:
+                    log("Navigating to https://muse.ai...")
+                    page.goto("https://muse.ai", timeout=30000, wait_until="domcontentloaded")
+                except Exception as e:
+                    log(f"Navigation warning: {e}")
+
             # 1. Enter email
             existing_ids = get_existing_message_ids(client_id, refresh_token)
             log(f"Entering email: {email} (existing message IDs before send: {len(existing_ids)})")
@@ -239,7 +247,15 @@ def run(email: str = None, password: str = None, client_id: str = None, refresh_
 
     finally:
         log("Cleaning up browser process...")
-        subprocess.run(["taskkill", "/F", "/T", "/PID", str(browser_proc.pid)], capture_output=True)
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(browser_proc.pid)], capture_output=True)
+        except Exception:
+            pass
+        try:
+            subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True)
+        except Exception:
+            pass
+        time.sleep(1)
 
 
 if __name__ == "__main__":
