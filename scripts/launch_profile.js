@@ -143,8 +143,28 @@ function findBinary() {
 
 async function main() {
   let proxy = process.env.PROXY_URL;
+
+  // If a proxies.txt list is present, pick a proxy from the pool to rotate across endpoints
+  const proxiesFile = path.join(__dirname, '..', 'proxies.txt');
+  if (fs.existsSync(proxiesFile)) {
+    const list = fs.readFileSync(proxiesFile, 'utf-8')
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('#'));
+    if (list.length > 0) {
+      const chosen = list[Math.floor(Math.random() * list.length)];
+      const parts = chosen.split(':');
+      if (parts.length === 4) {
+        // host:port:user:pass -> URL format
+        proxy = `http://${parts[2]}:${parts[3]}@${parts[0]}:${parts[1]}`;
+      } else if (chosen.startsWith('http://') || chosen.startsWith('https://')) {
+        proxy = chosen;
+      }
+    }
+  }
+
   if (!proxy) {
-    console.error('[!] Error: PROXY_URL environment variable is required (e.g. export PROXY_URL=http://user:pass@host:port)');
+    console.error('[!] Error: PROXY_URL environment variable or proxies.txt is required');
     process.exit(1);
   }
 

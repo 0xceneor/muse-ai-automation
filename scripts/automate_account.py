@@ -148,12 +148,9 @@ def get_zip_from_ip(browser):
 
 
 def do_birthday(page):
-    """Set an adult birthday, re-reading the selects on every try.
-
-    The day list is rebuilt when the month changes, so a day captured before
-    that can be off the end of the list (and February only offers 28).
-    """
+    """Set an adult birthday with human-like behavioral pauses."""
     month, day, year = pick_adult_birthday()
+    time.sleep(random.uniform(2.5, 4.0))
 
     for attempt in range(1, 4):
         sels = page.locator("select")
@@ -162,12 +159,13 @@ def do_birthday(page):
             time.sleep(2)
             continue
 
+        time.sleep(random.uniform(0.6, 1.2))
         if not select_number(sels.nth(0), month):
             log(f"  attempt {attempt}: month {month} not selectable")
             time.sleep(1.5)
             continue
-        time.sleep(0.5)
 
+        time.sleep(random.uniform(0.8, 1.5))
         nums = []
         for opt in sels.nth(1).locator("option").all():
             text = (opt.inner_text() or "").strip()
@@ -180,6 +178,8 @@ def do_birthday(page):
             log(f"  attempt {attempt}: day {day} not selectable")
             time.sleep(1.5)
             continue
+
+        time.sleep(random.uniform(0.8, 1.5))
         if not select_number(sels.nth(2), year):
             log(f"  attempt {attempt}: year {year} not selectable")
             time.sleep(1.5)
@@ -192,6 +192,12 @@ def do_birthday(page):
             continue
 
         log(f"birthday {MONTHS[month - 1]} {day}, {year} (age {date.today().year - year})")
+        time.sleep(random.uniform(1.2, 2.5))
+        try:
+            page.locator(BIRTHDAY_BTN).first.hover()
+            time.sleep(random.uniform(0.4, 0.8))
+        except Exception:
+            pass
         page.locator(BIRTHDAY_BTN).first.click()
         log("birthday submitted")
         return True
@@ -202,6 +208,12 @@ def do_birthday(page):
 
 def do_disclosure(page):
     log("accepting the disclosure")
+    time.sleep(random.uniform(2.0, 3.5))
+    try:
+        page.locator(DISCLOSURE_BTN).first.hover()
+        time.sleep(random.uniform(0.3, 0.7))
+    except Exception:
+        pass
     page.locator(DISCLOSURE_BTN).first.click()
     return True
 

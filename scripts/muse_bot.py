@@ -2,6 +2,12 @@ import sys
 import time
 import argparse
 import os
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 from playwright.sync_api import sync_playwright
 
 try:
@@ -28,16 +34,37 @@ def log(msg):
 
 
 def get_page(browser):
+    page = None
     for context in browser.contexts:
-        for page in context.pages:
-            if "muse.ai" in page.url or "meta.ai" in page.url:
-                return page
-    if browser.contexts and browser.contexts[0].pages:
-        return browser.contexts[0].pages[0]
-    if browser.contexts:
-        return browser.contexts[0].new_page()
-    context = browser.new_context()
-    return context.new_page()
+        for p in context.pages:
+            if "muse.ai" in p.url or "meta.ai" in p.url:
+                page = p
+                break
+        if page:
+            break
+    if not page and browser.contexts and browser.contexts[0].pages:
+        page = browser.contexts[0].pages[0]
+    if not page and browser.contexts:
+        page = browser.contexts[0].new_page()
+    if not page:
+        context = browser.new_context()
+        page = context.new_page()
+
+    def on_req(req):
+        if "register-completion" in req.url:
+            log(f"[API REQ] {req.url} -> {req.post_data}")
+
+    def on_resp(res):
+        try:
+            if "register-completion" in res.url or res.status >= 400:
+                txt = res.text()
+                log(f"[API RESP {res.status}] {res.url[:70]} -> {txt[:300]}")
+        except Exception:
+            pass
+
+    page.on("request", on_req)
+    page.on("response", on_resp)
+    return page
 
 
 def which_screen(page):
@@ -174,6 +201,13 @@ def enter_email(page, email):
 
     deadline = time.time() + 40
     while time.time() < deadline:
+        dialog = page.locator('[role="dialog"]')
+        if dialog.count() > 0 and dialog.first.is_visible():
+            text = " ".join(dialog.first.inner_text().split())
+            if any(term in text.lower() for term in ("something went wrong", "can't", "cannot", "aren't")):
+                log(f"dialog on email screen: {text[:200]}")
+                take_status_snapshot(page, "muse_rejected.png")
+                return False
         if page.locator(OTP_SEL).count() > 0:
             log("OTP screen reached")
             return True

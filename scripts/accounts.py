@@ -27,15 +27,24 @@ OTP_RE = re.compile(r"\b(\d{6})\b")
 _domains = None
 
 
+def _get_opener():
+    proxy = os.getenv("PROXY_URL")
+    if proxy:
+        return urllib.request.build_opener(urllib.request.ProxyHandler({"https": proxy, "http": proxy}))
+    return urllib.request.build_opener()
+
+
 def _request(method, path, payload=None, token=None, retries=5):
     body = json.dumps(payload).encode() if payload is not None else None
+    opener = _get_opener()
     for attempt in range(retries):
         req = urllib.request.Request(API + path, data=body, method=method)
         req.add_header("Content-Type", "application/json")
+        req.add_header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/146.0.0.0")
         if token:
             req.add_header("Authorization", "Bearer " + token)
         try:
-            with urllib.request.urlopen(req, timeout=30) as resp:
+            with opener.open(req, timeout=30) as resp:
                 raw = resp.read()
             return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as e:
