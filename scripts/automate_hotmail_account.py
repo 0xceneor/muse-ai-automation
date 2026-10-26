@@ -66,24 +66,25 @@ def get_graph_access_token() -> str:
     return res["access_token"]
 
 
-def get_latest_message_id() -> str:
+def get_existing_message_ids() -> set:
     try:
         token = get_graph_access_token()
-        url = "https://graph.microsoft.com/v1.0/me/messages?$top=1&$orderby=receivedDateTime%20desc"
+        url = "https://graph.microsoft.com/v1.0/me/messages?$top=10&$select=id,receivedDateTime"
         req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
         res = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         messages = res.get("value", [])
-        if messages:
-            return messages[0].get("id")
+        return {msg["id"] for msg in messages}
     except Exception as e:
-        log(f"  Warning getting latest message id: {e}")
-    return None
+        log(f"  Warning getting existing message ids: {e}")
+        return set()
 
 
-def poll_graph_otp(timeout: int = 90, ignore_id: str = None) -> str:
+def poll_graph_otp(seen_ids: set = None, timeout: int = 90) -> str:
     log("Polling Microsoft Graph API for incoming Meta/Muse verification email...")
     token = get_graph_access_token()
     deadline = time.time() + timeout
+    if seen_ids is None:
+        seen_ids = set()
 
     while time.time() < deadline:
         url = "https://graph.microsoft.com/v1.0/me/messages?$top=5&$orderby=receivedDateTime%20desc"
@@ -92,7 +93,7 @@ def poll_graph_otp(timeout: int = 90, ignore_id: str = None) -> str:
             res = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
             messages = res.get("value", [])
             for msg in messages:
-                if ignore_id and msg.get("id") == ignore_id:
+                if msg.get("id") in seen_ids:
                     continue
                 subject = msg.get("subject", "")
                 preview = msg.get("bodyPreview", "")
@@ -101,14 +102,14 @@ def poll_graph_otp(timeout: int = 90, ignore_id: str = None) -> str:
                 match = re.search(r"\b(\d{6})\b", body)
                 if match:
                     code = match.group(1)
-                    log(f"[+] Found verification code in email: {code} (Subject: {subject})")
+                    log(f"[+] Found fresh verification code in email: {code} (Subject: {subject})")
                     return code
         except Exception as e:
             log(f"  Graph poll warning: {e}")
 
         time.sleep(3)
 
-    raise TimeoutError("Timed out waiting for Meta verification email via Graph API")
+    raise TimeoutError("Timed out waiting for fresh Meta verification email via Graph API")
 
 
 def cdp_ready(port: int, timeout: int = 30) -> bool:
@@ -177,8 +178,8 @@ def run():
             page.on("response", on_resp)
 
             # 1. Enter email
-            latest_id = get_latest_message_id()
-            log(f"Entering email: {EMAIL} (latest message ID before send: {latest_id})")
+            existing_ids = get_existing_message_ids()
+            log(f"Entering email: {EMAIL} (existing message IDs before send: {len(existing_ids)})")
             if not enter_email(page, EMAIL):
                 log("[-] Email entry rejected or failed")
                 take_status_snapshot(page, "hotmail_email_failed.png")
@@ -188,7 +189,7 @@ def run():
             log("[+] Reached OTP screen. Fetching code via Microsoft Graph API...")
 
             # 2. Retrieve OTP via Graph API
-            code = poll_graph_otp(timeout=90, ignore_id=latest_id)
+            code = poll_graph_otp(seen_ids=existing_ids, timeout=90)
             log(f"[+] Received OTP code: {code}")
 
             # 3. Enter OTP code

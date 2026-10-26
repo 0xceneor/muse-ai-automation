@@ -211,7 +211,7 @@ def enter_email(page, email):
                 return False
 
         # If inline error appears (e.g. "We couldn't send a code. Try again."), re-click Continue
-        err_loc = page.locator("text*='couldn\\'t send a code', text*='Try again'")
+        err_loc = page.get_by_text("couldn't send a code")
         if err_loc.count() > 0 and err_loc.first.is_visible() and time.time() > retry_cooldown:
             log("Inline error 'couldn't send a code' detected. Re-clicking Continue...")
             try:
@@ -220,7 +220,7 @@ def enter_email(page, email):
                 pass
             retry_cooldown = time.time() + 8
 
-        if page.locator(OTP_SEL).count() > 0 or page.locator("text*='Enter your code'").count() > 0:
+        if page.locator(OTP_SEL).count() > 0 or page.get_by_text("Enter your code").count() > 0:
             log("OTP screen reached")
             return True
         time.sleep(0.5)
