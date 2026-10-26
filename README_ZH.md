@@ -1,6 +1,6 @@
 # Muse.ai 自动化注册、激活与邀请码兑换完整方法论
 
-[English (英文)](README.md) | [简体中文](README_ZH.md)
+[English (英文)](README.md) | [简体中文](README_ZH.md) | [技术架构深度解析](ARCHITECTURE_ZH.md) | [故障排查与运维指南](TROUBLESHOOTING_ZH.md)
 
 生产级自动化方法论、技术架构全解析以及基于 Playwright CDP 的全流程自动化脚本。用于在 **CloakBrowser**、住宅代理及自动化邀请码兑换机制下，批量开通、验证并激活 **Muse.ai** 个人 AI 账户。
 

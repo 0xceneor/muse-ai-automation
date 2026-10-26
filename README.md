@@ -1,6 +1,6 @@
 # Muse.ai Automation, Activation & Onboarding Methodology
 
-[English](README.md) | [简体中文 (Mandarin)](README_ZH.md)
+[English](README.md) | [简体中文 (Mandarin)](README_ZH.md) | [Technical Architecture](ARCHITECTURE.md) | [Troubleshooting Playbook](TROUBLESHOOTING.md)
 
 Production-grade automation methodology, technical architecture, and Playwright CDP scripts for provisioning, verifying, and activating **Muse.ai** accounts with CloakBrowser, residential proxies, and automated invite token redemption.
 
