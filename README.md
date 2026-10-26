@@ -68,8 +68,13 @@ muse-ai-automation/
 ├── requirements.txt          # Python dependencies
 ├── package.json              # Node.js dependencies
 ├── .env.example              # Configuration template
+├── proxies.txt               # Optional residential proxy pool (host:port:user:pass, gitignored)
 └── scripts/
-    ├── launch_profile.js     # Headed CloakBrowser launcher with local bridge
+    ├── launch_profile.js     # CloakBrowser launcher with local bridge & proxy pool rotation
+    ├── clean_and_verify.py   # Purges supercookies, caches, randomizes seeds, verifies stealth
+    ├── register_custom_email.py # Stepped runner for custom/Gmail addresses
+    ├── run_batch.py          # Automated batch provisioner across dedicated profiles
+    ├── run_one.py            # Streamlined single-account end-to-end runner
     ├── accounts.py           # mail.tm inboxes + credential ledger
     ├── muse_bot.py           # CLI automation bot (CDP driver)
     └── automate_account.py   # Onboarding, card verification, invite redemption
@@ -134,7 +139,11 @@ INVITE_CODE=YOUR_INVITE_CODE
 ```
 `INVITE_CODE` is optional. With it set, onboarding ends in redemption; without it, the run stops once the workspace loads and the account is still usable.
 
-### 3. One account
+### 3. One account (Automated Disposable Inbox)
+```bash
+python scripts/run_one.py
+```
+Or manually step-by-step:
 ```bash
 node scripts/launch_profile.js          # terminal 1, leave running
 python scripts/muse_bot.py --new-account     # terminal 2
@@ -142,7 +151,24 @@ python scripts/muse_bot.py --fetch-otp
 python scripts/automate_account.py
 ```
 
-### 4. Many accounts
+### 4. Custom Email (e.g. Gmail / Outlook / Custom Domain)
+When using custom or personal emails where OTP is delivered to your private mailbox:
+```bash
+# Step 1: Submit email and wait on OTP screen
+python scripts/register_custom_email.py --email user@gmail.com
+
+# Step 2: Once OTP is received, submit the code to complete onboarding and token redemption
+python scripts/register_custom_email.py --code 123456
+```
+
+### 5. Cleaning & Stealth Verification Audit
+If you suspect browser profile or fingerprint flagging, run the automated cleaner:
+```bash
+python scripts/clean_and_verify.py
+```
+This terminates lingering processes, purges all stored caches and supercookies, generates a new randomized hardware seed, and verifies stealth properties (`navigator.webdriver === false`, authentic WebGL renderer, taskbar offset, and WebRTC proxy binding).
+
+### 6. Many accounts (Batch Automation)
 Give each account its own profile and port so browser state never carries over:
 
 ```bash

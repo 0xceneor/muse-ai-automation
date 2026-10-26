@@ -68,9 +68,14 @@ muse-ai-automation/
 ├── requirements.txt          # Python 依赖清单
 ├── package.json              # Node.js 配置与依赖
 ├── .env.example              # 配置文件模版
+├── proxies.txt               # 住宅代理池配置（host:port:user:pass，已 gitignore）
 └── scripts/
-    ├── launch_profile.js     # 带代理网桥的有头 CloakBrowser 启动器
-    ├── accounts.py           # mail.tm 邮箱与凭据账本
+    ├── launch_profile.js     # CloakBrowser 启动器与本地代理网桥（支持代理池轮换）
+    ├── clean_and_verify.py   # 环境深度清理工具（清除超级缓存、随机指纹、验证隐身状态）
+    ├── register_custom_email.py # 自定义/真实邮箱分步注册工具（支持 Gmail 等）
+    ├── run_batch.py          # 批量全自动账号开通脚本
+    ├── run_one.py            # 单账号全自动一键开通驱动脚本
+    ├── accounts.py           # 临时邮箱与凭据账本管理
     ├── muse_bot.py           # CDP 自动化交互控制台（CLI 驱动）
     └── automate_account.py   # 开通、绑卡核验与邀请码兑换
 ```
@@ -134,7 +139,11 @@ INVITE_CODE=YOUR_INVITE_CODE
 ```
 `INVITE_CODE` 可留空。填写时流程以兑换收尾；留空则在工作区加载完成后停止，账号本身依然可用。
 
-### 3. 单个账号
+### 3. 单个账号（全自动临时邮箱）
+```bash
+python scripts/run_one.py
+```
+或按步骤分步执行：
 ```bash
 node scripts/launch_profile.js               # 终端 1，保持运行
 python scripts/muse_bot.py --new-account     # 终端 2
@@ -142,7 +151,24 @@ python scripts/muse_bot.py --fetch-otp
 python scripts/automate_account.py
 ```
 
-### 4. 批量账号
+### 4. 自定义邮箱注册（如 Gmail / Outlook / 个人域名）
+若使用自己的邮箱，验证码将发送至个人收件箱：
+```bash
+# 步骤 1：提交邮箱并在验证码界面保持会话
+python scripts/register_custom_email.py --email user@gmail.com
+
+# 步骤 2：收到邮件中的 6 位数字验证码后，提交并完成开通与兑换
+python scripts/register_custom_email.py --code 123456
+```
+
+### 5. 浏览器环境清理与防封指纹审计
+若怀疑当前浏览器配置或指纹被风控识别，可运行一键清理工具：
+```bash
+python scripts/clean_and_verify.py
+```
+该工具会强制关闭后台残留进程、清理所有 profile 本地存储与超级 Cookie、生成新的高强度硬件指纹种子并验证隐身参数（`navigator.webdriver === false`、真实显卡渲染器、任务栏几何对齐与 WebRTC 严格代理隧道）。
+
+### 6. 批量账号开通
 每个账号使用独立 profile 与独立端口，浏览器状态互不串味：
 
 ```bash

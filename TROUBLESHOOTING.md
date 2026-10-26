@@ -119,6 +119,31 @@ curl -x http://127.0.0.1:<bridge_port> https://ipinfo.io/json
 
 ---
 
+### Scenario 7: HTTP 403 `registrationBlocked` on Birthday Submission
+* **Symptom**: Submitting the birthday triggers:
+  ```json
+  [API RESP 403] https://muse.ai/api/auth/native/register-completion
+  {"type":"registrationBlocked","title":"Registration Blocked","detail":"Something went wrong. Please try again later.","status":403}
+  ```
+* **Root cause**: Meta's risk engine has blacklisted the disposable email domain (e.g. `@maxxspace.com`). The email receives OTP fine, but the backend rejects account creation on disposable domains.
+* **Resolution**: Use clean domains or custom email addresses via the stepped runner:
+  ```bash
+  python scripts/register_custom_email.py --email user@gmail.com
+  python scripts/register_custom_email.py --code <6-digit-otp>
+  ```
+
+---
+
+### Scenario 8: Browser Environment Flagging & Supercookie Residue
+* **Symptom**: Repeated "Something went wrong" errors regardless of proxy IP rotation.
+* **Root cause**: Persistent Chromium `user-data-dir` stores HSTS supercookies, IndexedDB tokens (`fbsbx`, `device_id`), and identical sub-pixel canvas hashes across runs.
+* **Resolution**: Run the zero-persistence deep purge:
+  ```bash
+  python scripts/clean_and_verify.py
+  ```
+
+---
+
 ## 3. Human Intervention Protocol
 
 The entire pipeline is intentionally designed around **Headed CloakBrowser Sessions**:

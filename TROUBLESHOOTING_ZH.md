@@ -119,6 +119,31 @@ curl -x http://127.0.0.1:<bridge_port> https://ipinfo.io/json
 
 ---
 
+### 场景 7：提交生日时接口返回 HTTP 403 `registrationBlocked`
+* **现象**：提交生日时出现弹窗：
+  ```json
+  [API RESP 403] https://muse.ai/api/auth/native/register-completion
+  {"type":"registrationBlocked","title":"Registration Blocked","detail":"Something went wrong. Please try again later.","status":403}
+  ```
+* **原因**：Meta 后端风控系统已将当前临时邮箱域名（如 `@maxxspace.com`）列入黑名单。虽然可以正常收取验证码，但在最后注册归档时后端直接拒绝。
+* **处置方案**：使用未被列入黑名单的干净域名或真实邮箱，运行分步定制注册：
+  ```bash
+  python scripts/register_custom_email.py --email user@gmail.com
+  python scripts/register_custom_email.py --code <6位数字验证码>
+  ```
+
+---
+
+### 场景 8：浏览器环境标记与超级 Cookie 残留
+* **现象**：即使频繁更换代理出口 IP，页面仍持续弹出“Something went wrong”。
+* **原因**：Chromium 的 `user-data-dir` 中残留了 HSTS 超级 Cookie、IndexedDB 设备标识符（`fbsbx`, `device_id`）或跨会话静态指纹噪声。
+* **处置方案**：执行零持久化深层环境清理：
+  ```bash
+  python scripts/clean_and_verify.py
+  ```
+
+---
+
 ## 3. 人机无缝协同协议
 
 整套自动化方案采用**桌面有头（Headed）CloakBrowser 会话**设计：
