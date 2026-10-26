@@ -274,11 +274,23 @@ def enter_otp(page, otp_code):
     page.locator(CONFIRM_SEL).first.click(force=True)
 
     deadline = time.time() + 45
+    retry_cooldown = time.time() + 5
     while time.time() < deadline:
         dialog = page.locator('[role="dialog"]')
         if dialog.count() > 0:
             log("dialog: " + " ".join(dialog.first.inner_text().split())[:200])
             return False
+
+        # If inline error appears (e.g. "We couldn't complete your login. Try again."), re-click Confirm
+        err = page.get_by_text("couldn't complete your login")
+        if err.count() > 0 and err.first.is_visible() and time.time() > retry_cooldown:
+            log("Inline error on OTP screen: 'We couldn't complete your login'. Re-clicking Confirm...")
+            try:
+                page.locator(CONFIRM_SEL).first.click(force=True)
+            except Exception:
+                pass
+            retry_cooldown = time.time() + 6
+
         if page.locator(OTP_SEL).count() == 0:
             log("OTP accepted, moved on")
             return True

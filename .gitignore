@@ -4,5 +4,6 @@ __pycache__/
 .env
 proxies.txt
 accounts.csv
+batch_accounts.json
 artifacts/
 .DS_Store

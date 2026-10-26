@@ -43,22 +43,24 @@ from muse_bot import (
 )
 from automate_account import run_all_after_email, screen_of
 
+import argparse
+
 CDP_PORT = 9222
 CDP_URL = f"http://127.0.0.1:{CDP_PORT}"
 
-CLIENT_ID = os.getenv("HOTMAIL_CLIENT_ID")
-REFRESH_TOKEN = os.getenv("HOTMAIL_REFRESH_TOKEN")
-EMAIL = os.getenv("HOTMAIL_EMAIL", "")
-PASSWORD = os.getenv("HOTMAIL_PASSWORD", "")
-INVITE_CODE = os.getenv("INVITE_CODE", "RM99IU")
+ENV_CLIENT_ID = os.getenv("HOTMAIL_CLIENT_ID", "")
+ENV_REFRESH_TOKEN = os.getenv("HOTMAIL_REFRESH_TOKEN", "")
+ENV_EMAIL = os.getenv("HOTMAIL_EMAIL", "")
+ENV_PASSWORD = os.getenv("HOTMAIL_PASSWORD", "")
+ENV_INVITE_CODE = os.getenv("INVITE_CODE", "RM99IU")
 
 
-def get_graph_access_token() -> str:
+def get_graph_access_token(client_id: str, refresh_token: str) -> str:
     ep = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
     data = urllib.parse.urlencode({
-        "client_id": CLIENT_ID,
+        "client_id": client_id,
         "grant_type": "refresh_token",
-        "refresh_token": REFRESH_TOKEN,
+        "refresh_token": refresh_token,
         "scope": "https://graph.microsoft.com/Mail.Read",
     }).encode()
     req = urllib.request.Request(ep, data=data, headers={"Content-Type": "application/x-www-form-urlencoded"})
@@ -66,9 +68,9 @@ def get_graph_access_token() -> str:
     return res["access_token"]
 
 
-def get_existing_message_ids() -> set:
+def get_existing_message_ids(client_id: str, refresh_token: str) -> set:
     try:
-        token = get_graph_access_token()
+        token = get_graph_access_token(client_id, refresh_token)
         url = "https://graph.microsoft.com/v1.0/me/messages?$top=10&$select=id,receivedDateTime"
         req = urllib.request.Request(url, headers={"Authorization": "Bearer " + token})
         res = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -79,9 +81,9 @@ def get_existing_message_ids() -> set:
         return set()
 
 
-def poll_graph_otp(seen_ids: set = None, timeout: int = 90) -> str:
+def poll_graph_otp(client_id: str, refresh_token: str, seen_ids: set = None, timeout: int = 90) -> str:
     log("Polling Microsoft Graph API for incoming Meta/Muse verification email...")
-    token = get_graph_access_token()
+    token = get_graph_access_token(client_id, refresh_token)
     deadline = time.time() + timeout
     if seen_ids is None:
         seen_ids = set()
@@ -124,11 +126,19 @@ def cdp_ready(port: int, timeout: int = 30) -> bool:
     return False
 
 
-def run():
-    log(f"Starting automated provisioning for: {EMAIL}")
-    if not CLIENT_ID or not REFRESH_TOKEN:
-        log("[-] HOTMAIL_CLIENT_ID and HOTMAIL_REFRESH_TOKEN must be set in .env")
-        sys.exit(1)
+def run(email: str = None, password: str = None, client_id: str = None, refresh_token: str = None, invite_code: str = None) -> bool:
+    email = email or ENV_EMAIL
+    password = password or ENV_PASSWORD
+    client_id = client_id or ENV_CLIENT_ID
+    refresh_token = refresh_token or ENV_REFRESH_TOKEN
+    invite_code = invite_code or ENV_INVITE_CODE
+
+    prefix = email.split("@")[0].lower() if email else "hotmail"
+
+    log(f"Starting automated provisioning for: {email}")
+    if not client_id or not refresh_token:
+        log("[-] client_id and refresh_token must be provided or set in .env")
+        return False
 
     profile_name = f"profile_hotmail_{secrets.token_hex(3)}"
     fp_seed = random.randint(100000, 999999)
@@ -158,7 +168,7 @@ def run():
         log("Waiting for browser CDP endpoint...")
         if not cdp_ready(CDP_PORT, timeout=40):
             log("[-] Browser CDP timed out")
-            sys.exit(1)
+            return False
 
         log("Browser CDP is ready. Connecting Playwright...")
         with sync_playwright() as p:
@@ -177,47 +187,55 @@ def run():
 
             page.on("response", on_resp)
 
-            # 1. Enter email
-            existing_ids = get_existing_message_ids()
-            log(f"Entering email: {EMAIL} (existing message IDs before send: {len(existing_ids)})")
-            if not enter_email(page, EMAIL):
-                log("[-] Email entry rejected or failed")
-                take_status_snapshot(page, "hotmail_email_failed.png")
-                sys.exit(1)
+            # Block heavy streaming background media/video to conserve residential proxy bandwidth
+            try:
+                page.route("**/*", lambda route: route.abort() if route.request.resource_type in ["media"] else route.continue_())
+            except Exception:
+                pass
 
-            take_status_snapshot(page, "hotmail_otp_screen.png")
+            # 1. Enter email
+            existing_ids = get_existing_message_ids(client_id, refresh_token)
+            log(f"Entering email: {email} (existing message IDs before send: {len(existing_ids)})")
+            if not enter_email(page, email):
+                log("[-] Email entry rejected or failed")
+                take_status_snapshot(page, f"{prefix}_email_failed.png")
+                return False
+
+            take_status_snapshot(page, f"{prefix}_otp_screen.png")
             log("[+] Reached OTP screen. Fetching code via Microsoft Graph API...")
 
             # 2. Retrieve OTP via Graph API
-            code = poll_graph_otp(seen_ids=existing_ids, timeout=90)
+            code = poll_graph_otp(client_id, refresh_token, seen_ids=existing_ids, timeout=90)
             log(f"[+] Received OTP code: {code}")
 
             # 3. Enter OTP code
             if not enter_otp(page, code):
                 log("[-] OTP was rejected by Meta")
-                take_status_snapshot(page, "hotmail_otp_rejected.png")
-                sys.exit(1)
+                take_status_snapshot(page, f"{prefix}_otp_rejected.png")
+                return False
 
             log("[+] OTP accepted! Proceeding to onboarding (birthday, card, invite)...")
 
             # 4. Finish onboarding
-            if run_all_after_email(page, browser, invite_code=INVITE_CODE):
-                log(f"[SUCCESS] {EMAIL} successfully registered and credited with 1B tokens!")
+            if run_all_after_email(page, browser, invite_code=invite_code):
+                log(f"[SUCCESS] {email} successfully registered and credited with 1B tokens!")
+                take_status_snapshot(page, f"{prefix}_account_active.png")
                 take_status_snapshot(page, "hotmail_account_active.png")
                 accounts._upsert(
-                    EMAIL,
-                    password=PASSWORD,
+                    email,
+                    password=password,
                     status="active",
                     created_at=time.strftime("%Y-%m-%d %H:%M:%S"),
                 )
                 print("\n" + "=" * 60)
-                print(f"ACCOUNT PROVISIONED SUCCESSFULLY: {EMAIL}")
-                print(f"INVITE REDEEMED: {INVITE_CODE} (1 Billion Tokens)")
+                print(f"ACCOUNT PROVISIONED SUCCESSFULLY: {email}")
+                print(f"INVITE REDEEMED: {invite_code} (1 Billion Tokens)")
                 print("=" * 60 + "\n")
+                return True
             else:
                 log("[-] Onboarding did not finish cleanly")
-                take_status_snapshot(page, "hotmail_onboarding_failed.png")
-                sys.exit(1)
+                take_status_snapshot(page, f"{prefix}_onboarding_failed.png")
+                return False
 
     finally:
         log("Cleaning up browser process...")
@@ -225,4 +243,20 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    parser = argparse.ArgumentParser(description="Automate Hotmail Muse Account Creation")
+    parser.add_argument("--email", default=None, help="Hotmail address")
+    parser.add_argument("--password", default=None, help="Hotmail password")
+    parser.add_argument("--client-id", default=None, help="Microsoft Graph Client ID")
+    parser.add_argument("--refresh-token", default=None, help="Microsoft Graph Refresh Token")
+    parser.add_argument("--invite-code", default=None, help="Muse Invite Code")
+    args = parser.parse_args()
+
+    success = run(
+        email=args.email,
+        password=args.password,
+        client_id=args.client_id,
+        refresh_token=args.refresh_token,
+        invite_code=args.invite_code,
+    )
+    if not success:
+        sys.exit(1)

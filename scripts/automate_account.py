@@ -33,7 +33,7 @@ EXP_SEL = 'input[placeholder*="MM/YY" i], input[placeholder*="MM / YY" i]'
 CVV_SEL = 'input[placeholder*="CVV" i], input[placeholder*="CVC" i]'
 ZIP_SEL = 'input[placeholder*="ZIP" i], input[aria-label*="ZIP" i], input[placeholder*="Postal" i]'
 BIRTHDAY_BTN = 'button[data-pel-click="login_birthday_continue_click"]'
-DISCLOSURE_BTN = 'button:has-text("Get started"), button[data-pel-click="onboarding_disclosure_continue_click"]'
+DISCLOSURE_BTN = 'button:has-text("Get started"), button:has-text("Continue"), button[data-pel-click*="disclosure"], button[data-pel-click="onboarding_disclosure_continue_click"]'
 SETTINGS_BTN = 'button[aria-label="Settings"], button[data-pel-click="settings_menu_open_click"]'
 SETTINGS_NAV = '[data-pel-click="settings_nav_click"]'
 REDEEM_ENTRY = '[data-pel-click="invite_redeem_open_click"]'
@@ -75,9 +75,11 @@ def screen_of(page):
         return "birthday"
     if has(OTP_SEL):
         return "otp"
-    # The disclosure page also carries a Settings button, so it is checked first.
-    if has(SETTINGS_BTN) and "/access/" not in page.url:
+    # The disclosure/access page also carries a Settings button, so /access must be excluded
+    if (has(SETTINGS_BTN) or has('button:has-text("Chats")')) and "/access" not in page.url:
         return "workspace"
+    if "/access" in page.url and has(DISCLOSURE_BTN):
+        return "disclosure"
     return "unknown"
 
 
@@ -149,7 +151,7 @@ def get_zip_from_ip(browser):
 
 
 def do_birthday(page):
-    """Set an adult birthday with human-like behavioral pauses."""
+    """Set an adult birthday with human-like behavioral pauses and React state sync."""
     month, day, year = pick_adult_birthday()
     time.sleep(random.uniform(2.5, 4.0))
 
@@ -160,56 +162,59 @@ def do_birthday(page):
             time.sleep(2)
             continue
 
-        time.sleep(random.uniform(0.6, 1.2))
-        if not select_number(sels.nth(0), month):
-            log(f"  attempt {attempt}: month {month} not selectable")
-            time.sleep(1.5)
-            continue
-
-        time.sleep(random.uniform(0.8, 1.5))
-        nums = []
-        for opt in sels.nth(1).locator("option").all():
-            text = (opt.inner_text() or "").strip()
-            if text.isdigit():
-                nums.append(int(text))
-        if nums:
-            day = min(day, max(nums))
-
-        if not select_number(sels.nth(1), day):
-            log(f"  attempt {attempt}: day {day} not selectable")
-            time.sleep(1.5)
-            continue
-
-        time.sleep(random.uniform(0.8, 1.5))
-        if not select_number(sels.nth(2), year):
-            log(f"  attempt {attempt}: year {year} not selectable")
-            time.sleep(1.5)
-            continue
-
-        got = [page.locator("select").nth(i).input_value() for i in range(3)]
-        if got[2] != str(year) or got[1] != str(day) or not got[2].isdigit():
-            log(f"  attempt {attempt}: values did not stick ({got})")
-            time.sleep(1.5)
-            continue
-
         log(f"birthday {MONTHS[month - 1]} {day}, {year} (age {date.today().year - year})")
-        time.sleep(random.uniform(1.2, 2.5))
-        try:
-            page.locator(BIRTHDAY_BTN).first.hover()
-            time.sleep(random.uniform(0.4, 0.8))
-        except Exception:
-            pass
-        page.locator(BIRTHDAY_BTN).first.click()
-        log("birthday submitted")
-        try:
-            page.wait_for_function(
-                "() => document.querySelectorAll('select').length < 3 || window.location.pathname.includes('/access/')",
-                timeout=15000,
-            )
-        except Exception:
-            pass
-        time.sleep(2)
-        return True
+
+        # Use React-native property setter to ensure React component state updates
+        res = page.evaluate("""([m, d, y]) => {
+            const selects = document.querySelectorAll('select');
+            if (selects.length < 3) return { success: false, reason: 'not enough selects' };
+            
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+            
+            // Year (selects[2])
+            setter.call(selects[2], String(y));
+            selects[2].dispatchEvent(new Event('input', { bubbles: true }));
+            selects[2].dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Month (selects[0])
+            setter.call(selects[0], String(m));
+            selects[0].dispatchEvent(new Event('input', { bubbles: true }));
+            selects[0].dispatchEvent(new Event('change', { bubbles: true }));
+
+            // Day (selects[1])
+            setter.call(selects[1], String(d));
+            selects[1].dispatchEvent(new Event('input', { bubbles: true }));
+            selects[1].dispatchEvent(new Event('change', { bubbles: true }));
+
+            const btn = document.querySelector('button[data-pel-click="login_birthday_continue_click"]');
+            return {
+                success: true,
+                values: [selects[0].value, selects[1].value, selects[2].value],
+                btnDisabled: btn ? btn.disabled : null
+            };
+        }""", [month, day, year])
+
+        time.sleep(random.uniform(1.0, 1.8))
+        btn = page.locator(BIRTHDAY_BTN).first
+        if btn.count() > 0:
+            try:
+                btn.hover()
+                time.sleep(0.5)
+            except Exception:
+                pass
+            btn.click(force=True)
+            log("birthday submitted")
+            try:
+                page.wait_for_function(
+                    "() => document.querySelectorAll('select').length < 3 || window.location.pathname.includes('/access/')",
+                    timeout=15000,
+                )
+            except Exception:
+                pass
+            time.sleep(2)
+            return True
+
+        time.sleep(1.5)
 
     log("could not set an adult birthday")
     return False
