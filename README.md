@@ -1,6 +1,10 @@
 # Muse.ai Automation, Activation & Onboarding Methodology
 
+[English](README.md) | [简体中文 (Mandarin)](README_ZH.md)
+
 Production-grade automation methodology, technical architecture, and Playwright CDP scripts for provisioning, verifying, and activating **Muse.ai** accounts with CloakBrowser, residential proxies, and automated invite token redemption.
+
+> **Core Anti-Detect Browser Engine**: Built on **[CloakBrowser (0xceneor/CloakBrowser)](https://github.com/0xceneor/CloakBrowser)** — featuring 87 source-level C++ fingerprint patches, Desktop Profile Manager, and integrated local loopback proxy bridging.
 
 ---
 
@@ -109,7 +113,7 @@ muse-ai-automation/
 ### 1. Prerequisites
 - **Node.js**: v20+ or v24+
 - **Python**: 3.10+
-- **CloakBrowser**: Stealth Chromium binary installed (`~/.cloakbrowser/chromium-*/chrome.exe`)
+- **[CloakBrowser](https://github.com/0xceneor/CloakBrowser)**: Stealth Chromium binary installed (`~/.cloakbrowser/chromium-*/chrome.exe`)
 
 ```bash
 pip install -r requirements.txt
