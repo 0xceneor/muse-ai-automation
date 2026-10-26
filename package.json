@@ -1,0 +1,18 @@
+{
+  "name": "muse-ai-automation",
+  "version": "1.0.0",
+  "description": "Production-grade Muse.ai automation methodology, proxy bridge, and account provisioning pipeline.",
+  "main": "scripts/launch_profile.js",
+  "scripts": {
+    "start": "node scripts/launch_profile.js"
+  },
+  "keywords": [
+    "muse-ai",
+    "automation",
+    "stealth",
+    "anti-detect",
+    "playwright"
+  ],
+  "author": "0xceneor",
+  "license": "MIT"
+}
